@@ -1,5 +1,5 @@
 -- Run this in your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/wkvakrcappcyftdoejjw/sql
+-- https://supabase.com/dashboard/project/aiteeogidtfpysutowkt/sql
 --
 -- PRIVACY MODEL:
 --   Questions are AES-256-GCM encrypted in the browser before upload.
