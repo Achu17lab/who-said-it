@@ -155,12 +155,24 @@
 
     .participants-grid { display: flex; flex-wrap: wrap; gap: 8px; }
     .participant-chip {
-      padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 500;
-      cursor: pointer; border: 2px solid transparent; background: var(--surface2);
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 10px 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 500;
+      border: 2px solid transparent; background: var(--surface2);
       color: var(--muted); transition: all 0.15s; user-select: none;
     }
     .participant-chip.selected {
       background: rgba(124,110,249,0.15); border-color: var(--accent); color: var(--text);
+    }
+    .chip-label { cursor: pointer; }
+    .chip-edit-btn {
+      font-size: 11px; opacity: 0; cursor: pointer; padding: 1px 3px;
+      border-radius: 4px; transition: opacity 0.15s, background 0.15s; line-height: 1;
+    }
+    .participant-chip:hover .chip-edit-btn { opacity: 0.6; }
+    .chip-edit-btn:hover { opacity: 1 !important; background: rgba(255,255,255,0.1); }
+    .chip-input {
+      background: transparent; border: none; outline: none; color: inherit;
+      font: inherit; font-size: 13px; font-weight: 500; width: 90px; min-width: 60px;
     }
 
     .mode-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
@@ -502,6 +514,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let allMessages = [];
 let participants = [];
 let selectedParticipants = new Set();
+let nameAliases = {}; // {originalName: displayName}
 let quizQuestions = [];  // [{text, author, choices}]
 let currentQ = 0;
 let score = 0;
@@ -628,6 +641,7 @@ function processFile(file) {
         allMessages = msgs;
         participants = parts;
         selectedParticipants = new Set(parts);
+        nameAliases = {};
         setupSettings();
         showScreen('screen-settings');
       } catch(err) {
@@ -700,8 +714,20 @@ function setupSettings() {
   participants.forEach(p => {
     const chip = document.createElement('div');
     chip.className = 'participant-chip selected';
-    chip.textContent = p;
-    chip.addEventListener('click', () => {
+
+    const label = document.createElement('span');
+    label.className = 'chip-label';
+    label.textContent = nameAliases[p] || p;
+
+    const editBtn = document.createElement('span');
+    editBtn.className = 'chip-edit-btn';
+    editBtn.textContent = '✏️';
+    editBtn.title = 'Rename';
+
+    chip.appendChild(label);
+    chip.appendChild(editBtn);
+
+    label.addEventListener('click', () => {
       if (selectedParticipants.has(p)) {
         if (selectedParticipants.size <= 2) return;
         selectedParticipants.delete(p); chip.classList.remove('selected');
@@ -710,6 +736,27 @@ function setupSettings() {
       }
       updateUsable();
     });
+
+    editBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.className = 'chip-input';
+      input.value = nameAliases[p] || p;
+      chip.replaceChildren(input);
+      input.focus();
+      input.select();
+
+      const confirm = () => {
+        const val = input.value.trim();
+        if (val && val !== p) nameAliases[p] = val;
+        else if (!val) delete nameAliases[p];
+        label.textContent = nameAliases[p] || p;
+        chip.replaceChildren(label, editBtn);
+      };
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); confirm(); } if (e.key === 'Escape') { chip.replaceChildren(label, editBtn); } });
+      input.addEventListener('blur', confirm);
+    });
+
     grid.appendChild(chip);
   });
   const slider = $('q-count');
@@ -839,12 +886,13 @@ function buildQuizQuestions() {
   }
   shuffle(balanced);
   const selected = balanced.slice(0, count);
+  const alias = name => nameAliases[name] || name;
   const parts = [...selectedParticipants];
   return selected.map(msg => {
     const others = parts.filter(p => p !== msg.author);
     shuffle(others);
-    const choices = shuffle([msg.author, ...others.slice(0, 3)]);
-    return { text: msg.text, author: msg.author, choices };
+    const choices = shuffle([msg.author, ...others.slice(0, 3)]).map(alias);
+    return { text: msg.text, author: alias(msg.author), choices };
   });
 }
 
