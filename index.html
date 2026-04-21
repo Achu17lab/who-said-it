@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Who Said It? 💬</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --surface: #1a1a24;
+      --surface2: #23232f;
+      --border: #2e2e3e;
+      --accent: #7c6ef9;
+      --accent2: #f97c6e;
+      --green: #4cde8a;
+      --red: #f96e6e;
+      --yellow: #f9d46e;
+      --text: #e8e8f0;
+      --muted: #8888a0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .app { width: 100%; max-width: 560px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── Shared ── */
+    .logo { font-size: 48px; text-align: center; margin-bottom: 8px; }
+    h1 {
+      font-size: 28px; font-weight: 800; text-align: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin-bottom: 6px;
+    }
+    .tagline { text-align: center; color: var(--muted); margin-bottom: 28px; font-size: 15px; }
+
+    .btn {
+      width: 100%; padding: 16px; border-radius: var(--radius);
+      border: none; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #9b8bff); color: white;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,110,249,0.3); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-size: 15px; font-weight: 600;
+      padding: 14px; border-radius: 12px; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: var(--surface2); }
+    .btn-ghost {
+      background: transparent; color: var(--muted);
+      font-size: 14px; padding: 10px; margin-top: 4px;
+    }
+    .btn-ghost:hover { color: var(--text); }
+    .btn-outline {
+      background: transparent; border: 2px solid var(--accent);
+      color: var(--accent); padding: 14px; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+    }
+    .btn-outline:hover { background: rgba(124,110,249,0.08); }
+
+    .error-msg {
+      margin-top: 14px; padding: 12px 16px;
+      background: rgba(249,110,110,0.1); border: 1px solid rgba(249,110,110,0.3);
+      border-radius: 10px; color: var(--red); font-size: 14px; display: none;
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted); font-weight: 600; margin-bottom: 14px;
+    }
+
+    /* ── Upload / Landing ── */
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 40px 28px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s; background: var(--surface);
+      margin-bottom: 14px;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent); background: rgba(124,110,249,0.06);
+    }
+    .upload-icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-zone p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+    .upload-zone strong { color: var(--text); }
+    #file-input { display: none; }
+
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: 13px; margin: 16px 0;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    .join-row { display: flex; gap: 10px; }
+    .input {
+      flex: 1; padding: 14px 16px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 12px;
+      color: var(--text); font-size: 15px; outline: none; transition: border-color 0.15s;
+    }
+    .input:focus { border-color: var(--accent); }
+    .input::placeholder { color: var(--muted); }
+    .input-code {
+      text-transform: uppercase; letter-spacing: 0.15em;
+      font-size: 18px; font-weight: 700; text-align: center;
+    }
+
+    .how-to { padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .how-to h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+    .how-to ol { padding-left: 18px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+    .how-to ol li span { color: var(--text); }
+
+    /* ── Settings ── */
+    .settings-header { text-align: center; margin-bottom: 24px; }
+    .settings-header h2 { font-size: 22px; font-weight: 700; }
+    .settings-header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+    .chat-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+    .stat {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 10px; text-align: center;
+    }
+    .stat-num { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .slider-row { display: flex; align-items: center; gap: 14px; }
+    input[type=range] {
+      -webkit-appearance: none; flex: 1; height: 4px;
+      border-radius: 4px; background: var(--border); outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px;
+      border-radius: 50%; background: var(--accent); cursor: pointer;
+    }
+    .slider-val { min-width: 32px; text-align: right; font-weight: 700; color: var(--accent); font-size: 18px; }
+
+    .participants-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .participant-chip {
+      padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: 2px solid transparent; background: var(--surface2);
+      color: var(--muted); transition: all 0.15s; user-select: none;
+    }
+    .participant-chip.selected {
+      background: rgba(124,110,249,0.15); border-color: var(--accent); color: var(--text);
+    }
+
+    .mode-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+
+    /* ── Room Screen ── */
+    .room-code-display {
+      text-align: center; padding: 32px;
+      background: linear-gradient(135deg, rgba(124,110,249,0.12), rgba(249,124,110,0.08));
+      border: 1px solid var(--accent); border-radius: var(--radius); margin-bottom: 20px;
+    }
+    .room-code-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+    .room-code-val { font-size: 52px; font-weight: 900; letter-spacing: 0.2em; color: var(--text); margin-bottom: 8px; }
+    .room-code-sub { font-size: 13px; color: var(--muted); }
+
+    .room-players { margin-bottom: 20px; }
+    .room-players-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    .player-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; }
+    .player-tag {
+      padding: 6px 14px; border-radius: 100px; background: rgba(76,222,138,0.1);
+      border: 1px solid rgba(76,222,138,0.3); color: var(--green); font-size: 13px; font-weight: 500;
+    }
+    .player-tag.host { background: rgba(124,110,249,0.12); border-color: rgba(124,110,249,0.3); color: var(--accent); }
+
+    /* ── Name Entry ── */
+    .name-screen { text-align: center; }
+    .name-screen h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .name-screen p { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .room-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 100px;
+      background: rgba(124,110,249,0.12); border: 1px solid rgba(124,110,249,0.3);
+      color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    /* ── Quiz ── */
+    .quiz-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .quiz-progress-text { font-size: 14px; color: var(--muted); }
+    .quiz-score-badge {
+      font-size: 13px; font-weight: 600; padding: 4px 12px;
+      border-radius: 100px; background: rgba(124,110,249,0.15); color: var(--accent);
+    }
+    .progress-bar { height: 4px; background: var(--border); border-radius: 4px; margin-bottom: 28px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 4px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    .message-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 28px 24px; margin-bottom: 22px; position: relative;
+      min-height: 110px; display: flex; align-items: center;
+    }
+    .message-card::before {
+      content: '"'; position: absolute; top: 10px; left: 18px;
+      font-size: 48px; color: var(--border); font-family: Georgia, serif; line-height: 1;
+    }
+    .message-text { font-size: 18px; line-height: 1.6; text-align: center; width: 100%; padding: 8px 0; }
+
+    .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+    .answer-btn {
+      padding: 14px 12px; background: var(--surface); border: 2px solid var(--border);
+      border-radius: 12px; color: var(--text); font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; text-align: center;
+    }
+    .answer-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(124,110,249,0.08); }
+    .answer-btn.correct { border-color: var(--green); background: rgba(76,222,138,0.12); color: var(--green); }
+    .answer-btn.wrong { border-color: var(--red); background: rgba(249,110,110,0.08); color: var(--red); }
+    .answer-btn.reveal { border-color: var(--green); background: rgba(76,222,138,0.06); color: var(--green); opacity: 0.7; }
+    .answer-btn:disabled { cursor: default; }
+
+    .feedback-bar {
+      text-align: center; padding: 13px; border-radius: 12px;
+      font-weight: 600; font-size: 15px; margin-bottom: 14px;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .feedback-bar.show { opacity: 1; }
+    .feedback-bar.correct-fb { background: rgba(76,222,138,0.1); color: var(--green); }
+    .feedback-bar.wrong-fb { background: rgba(249,110,110,0.1); color: var(--red); }
+
+    .next-btn {
+      width: 100%; padding: 14px; border-radius: 12px; border: none;
+      background: var(--surface2); color: var(--text); font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; display: none;
+    }
+    .next-btn.show { display: block; }
+    .next-btn:hover { background: var(--border); }
+
+    /* ── Results ── */
+    .results-emoji { font-size: 64px; text-align: center; margin-bottom: 12px; }
+    .results-score {
+      text-align: center; font-size: 52px; font-weight: 900;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin-bottom: 4px;
+    }
+    .results-label { text-align: center; color: var(--muted); margin-bottom: 6px; }
+    .results-tagline { text-align: center; font-size: 17px; font-weight: 600; margin-bottom: 24px; }
+
+    .results-breakdown { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+    .breakdown-header { padding: 12px 18px; background: var(--surface2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+    .breakdown-row { padding: 12px 18px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+    .breakdown-q { flex: 1; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .breakdown-author { color: var(--text); font-weight: 600; white-space: nowrap; }
+    .breakdown-icon { font-size: 16px; min-width: 20px; text-align: center; }
+    .breakdown-guess { font-size: 12px; color: var(--red); white-space: nowrap; }
+
+    .results-actions { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Leaderboard ── */
+    .lb-header { text-align: center; margin-bottom: 24px; }
+    .lb-header h2 { font-size: 24px; font-weight: 800; }
+    .lb-header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+    .lb-room-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 100px;
+      background: rgba(124,110,249,0.12); border: 1px solid rgba(124,110,249,0.3);
+      color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    .lb-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+    .lb-row {
+      padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+      border-bottom: 1px solid var(--border); transition: background 0.15s;
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-row.me { background: rgba(124,110,249,0.06); }
+    .lb-rank { font-size: 18px; min-width: 32px; text-align: center; }
+    .lb-name { flex: 1; font-weight: 600; font-size: 15px; }
+    .lb-score { font-weight: 700; font-size: 16px; color: var(--accent); }
+    .lb-pct { font-size: 13px; color: var(--muted); min-width: 40px; text-align: right; }
+    .lb-empty { padding: 32px; text-align: center; color: var(--muted); }
+
+    .refresh-note { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+    /* ── Loading ── */
+    .loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── LANDING / UPLOAD ── -->
+  <div class="screen active" id="screen-upload">
+    <div class="logo">💬</div>
+    <h1>Who Said It?</h1>
+    <p class="tagline">Upload your group chat — quiz your friends on who said what!</p>
+
+    <div class="upload-zone" id="upload-zone">
+      <div class="upload-icon">📂</div>
+      <strong>Drop your WhatsApp export here</strong>
+      <p>or click to choose a .txt file</p>
+    </div>
+    <input type="file" id="file-input" accept=".txt" />
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <div class="divider">or join a room</div>
+
+    <div class="join-row">
+      <input class="input input-code" id="join-code-input" placeholder="ROOM CODE" maxlength="6" />
+      <button class="btn btn-outline" id="join-btn" style="width:auto;padding:14px 20px">Join →</button>
+    </div>
+    <div class="error-msg" id="join-error-msg"></div>
+
+    <div class="how-to" style="margin-top:16px">
+      <h3>How to export from WhatsApp</h3>
+      <ol>
+        <li><span>Open the group chat</span></li>
+        <li><span>Tap ··· → More → Export Chat</span></li>
+        <li><span>Choose "Without Media"</span></li>
+        <li><span>Upload the .txt file above</span></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ── PARSING LOADING ── -->
+  <div class="screen" id="screen-loading">
+    <div class="loading"><div class="spinner"></div><p>Parsing your chat…</p></div>
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div class="screen" id="screen-settings">
+    <div class="settings-header">
+      <h2>Quiz Settings</h2>
+      <p id="chat-name-label">Your Chat</p>
+    </div>
+
+    <div class="chat-stats">
+      <div class="stat"><div class="stat-num" id="stat-messages">0</div><div class="stat-label">messages</div></div>
+      <div class="stat"><div class="stat-num" id="stat-people">0</div><div class="stat-label">people</div></div>
+      <div class="stat"><div class="stat-num" id="stat-usable">0</div><div class="stat-label">quiz-able</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Questions</div>
+      <div class="slider-row">
+        <input type="range" id="q-count" min="5" max="25" value="10" step="1" />
+        <div class="slider-val" id="q-count-val">10</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Include these people</div>
+      <div class="participants-grid" id="participants-grid"></div>
+    </div>
+
+    <div class="mode-btns">
+      <button class="btn btn-primary" id="create-room-btn">🔗 Create Shared Room</button>
+      <button class="btn btn-secondary" id="solo-btn">🎮 Play Solo</button>
+      <button class="btn btn-ghost" id="back-btn">← Upload different file</button>
+    </div>
+    <div class="error-msg" id="settings-error-msg"></div>
+  </div>
+
+  <!-- ── ROOM LOBBY ── -->
+  <div class="screen" id="screen-room">
+    <div class="logo" style="font-size:36px;margin-bottom:4px">🔗</div>
+    <h1 style="margin-bottom:4px">Room Created!</h1>
+    <p class="tagline">Share the code with your friends</p>
+
+    <div class="room-code-display">
+      <div class="room-code-label">Room Code</div>
+      <div class="room-code-val" id="room-code-display">------</div>
+      <div class="room-code-sub">Friends enter this at who-said-it</div>
+    </div>
+
+    <div class="room-players">
+      <div class="room-players-title">Players joined <span id="player-count">(0)</span></div>
+      <div class="player-list" id="player-list"></div>
+    </div>
+
+    <button class="btn btn-primary" id="room-start-btn">I'm Ready — Start Playing! 🎮</button>
+    <button class="btn btn-ghost" id="room-back-btn" style="margin-top:8px">← Back to settings</button>
+    <div class="error-msg" id="room-error-msg"></div>
+  </div>
+
+  <!-- ── JOIN NAME ENTRY ── -->
+  <div class="screen" id="screen-join">
+    <div class="name-screen">
+      <div style="font-size:40px;margin-bottom:8px">👋</div>
+      <h2>Joining Room</h2>
+      <p>What's your name?</p>
+      <div class="room-badge" id="join-room-badge">------</div>
+      <input class="input" id="player-name-input" placeholder="Your name" maxlength="30" style="margin-bottom:12px;width:100%;text-align:center" />
+      <button class="btn btn-primary" id="join-confirm-btn">Let's Play! 🎉</button>
+      <button class="btn btn-ghost" id="join-back-btn">← Back</button>
+      <div class="error-msg" id="name-error-msg"></div>
+    </div>
+  </div>
+
+  <!-- ── QUIZ ── -->
+  <div class="screen" id="screen-quiz">
+    <div class="quiz-header">
+      <span class="quiz-progress-text" id="quiz-progress">Question 1 of 10</span>
+      <span class="quiz-score-badge" id="quiz-score-badge">0 pts</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+
+    <div class="message-card">
+      <div class="message-text" id="quiz-message">…</div>
+    </div>
+
+    <div class="answers-grid" id="answers-grid"></div>
+    <div class="feedback-bar" id="feedback-bar">✓ Correct!</div>
+    <button class="next-btn" id="next-btn">Next →</button>
+  </div>
+
+  <!-- ── RESULTS ── -->
+  <div class="screen" id="screen-results">
+    <div class="results-emoji" id="results-emoji">🎉</div>
+    <div class="results-score" id="results-score">0/10</div>
+    <div class="results-label">correct answers</div>
+    <div class="results-tagline" id="results-tagline">Nice one!</div>
+
+    <div class="results-breakdown">
+      <div class="breakdown-header">Review</div>
+      <div id="breakdown-list"></div>
+    </div>
+
+    <div class="results-actions">
+      <button class="btn btn-primary" id="view-lb-btn" style="display:none">🏆 View Leaderboard</button>
+      <button class="btn btn-secondary" id="play-again-btn">Play Again 🔄</button>
+      <button class="btn btn-secondary" id="share-btn">📋 Copy Results</button>
+      <button class="btn btn-ghost" id="new-chat-btn">Upload Different Chat</button>
+    </div>
+  </div>
+
+  <!-- ── LEADERBOARD ── -->
+  <div class="screen" id="screen-leaderboard">
+    <div class="lb-header">
+      <div style="font-size:40px;margin-bottom:6px">🏆</div>
+      <h2>Leaderboard</h2>
+      <p>Who knows the group best?</p>
+    </div>
+    <div class="lb-room-badge" id="lb-room-badge">------</div>
+
+    <div class="lb-list" id="lb-list">
+      <div class="lb-empty">Loading scores…</div>
+    </div>
+
+    <p class="refresh-note" id="refresh-note"></p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-secondary" id="lb-refresh-btn">↻ Refresh</button>
+      <button class="btn btn-ghost" id="lb-home-btn">← Back to Home</button>
+    </div>
+  </div>
+
+  <!-- ── GENERIC LOADING ── -->
+  <div class="screen" id="screen-working">
+    <div class="loading"><div class="spinner"></div><p id="working-label">Working…</p></div>
+  </div>
+
+</div>
+
+<script>
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://wkvakrcappcyftdoejjw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_rR4eJsgFCJbDjXDNr41ilA_K513-qgF';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allMessages = [];
+let participants = [];
+let selectedParticipants = new Set();
+let quizQuestions = [];  // [{text, author, choices}]
+let currentQ = 0;
+let score = 0;
+let answers = [];
+let answered = false;
+let isRoomMode = false;
+let sessionId = null;
+let roomCode = null;
+let playerName = null;
+let playerScoreId = null;
+let realtimeSub = null;
+
+// ── DOM helpers ───────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const showScreen = id => {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+};
+const showError = (id, msg) => { const el = $(id); el.textContent = msg; el.style.display = 'block'; };
+const hideError = id => { $(id).style.display = 'none'; };
+
+// ── WhatsApp Parser ───────────────────────────────────────────────────────────
+const SKIP_PATTERNS = [
+  /^<media omitted>$/i, /^image omitted$/i, /^video omitted$/i,
+  /^audio omitted$/i, /^document omitted$/i, /^sticker omitted$/i,
+  /^gif omitted$/i, /^contact card omitted$/i,
+  /^missed (voice|video) call$/i,
+  /^\u200e?messages and calls are end-to-end encrypted/i,
+  /^\u200e?(you )?(were added|joined|left|created this group|changed|removed)/i,
+  /^\u200e?.+ (added|removed|left|joined|changed the subject|created this group)/i,
+  /^(this message was deleted|you deleted this message)$/i,
+  /^\u200e?(voice|video) call, .+$/i,
+];
+const MSG_REGEXES = [
+  /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]\s*([^:]+?):\s(.+)$/i,
+  /^(\d{1,2}\/\d{1,2}\/\d{2,4}),\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\s*[-–]\s*([^:]+?):\s(.+)$/i,
+  /^(\d{1,2}\.\d{1,2}\.\d{2,4}),\s*\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*([^:]+?):\s(.+)$/i,
+  /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*([^:]+?):\s(.+)$/i,
+];
+
+function isSkippable(text) {
+  if (text.length < 8) return true;
+  if (/^https?:\/\//.test(text) || /^www\./.test(text)) return true;
+  return SKIP_PATTERNS.some(p => p.test(text.trim()));
+}
+
+function parseChat(raw) {
+  const lines = raw.split(/\r?\n/);
+  const messages = [];
+  let lastMsg = null;
+  for (const line of lines) {
+    let matched = false;
+    for (const re of MSG_REGEXES) {
+      const m = line.match(re);
+      if (m) {
+        const author = m[2].trim().replace(/\u200e/g, '');
+        const text = m[3].trim();
+        if (!isSkippable(text)) { lastMsg = { author, text }; messages.push(lastMsg); }
+        else lastMsg = null;
+        matched = true; break;
+      }
+    }
+    if (!matched && lastMsg && line.trim() && !line.match(/^\[?\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4}/)) {
+      lastMsg.text += ' ' + line.trim();
+    }
+  }
+  return messages;
+}
+
+// ── Upload/Landing ────────────────────────────────────────────────────────────
+const uploadZone = $('upload-zone');
+const fileInput = $('file-input');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+function processFile(file) {
+  hideError('error-msg');
+  if (!file.name.endsWith('.txt')) { showError('error-msg', 'Please upload a .txt file exported from WhatsApp.'); return; }
+  showScreen('screen-loading');
+  const reader = new FileReader();
+  reader.onload = e => {
+    setTimeout(() => {
+      try {
+        const msgs = parseChat(e.target.result);
+        if (msgs.length < 10) { showScreen('screen-upload'); showError('error-msg', `Only ${msgs.length} usable messages found. Need a WhatsApp group chat with multiple people.`); return; }
+        const pMap = {};
+        msgs.forEach(m => { pMap[m.author] = (pMap[m.author] || 0) + 1; });
+        const parts = Object.entries(pMap).sort((a,b) => b[1]-a[1]).map(([name]) => name);
+        if (parts.length < 2) { showScreen('screen-upload'); showError('error-msg', 'Need at least 2 participants for a quiz!'); return; }
+        allMessages = msgs;
+        participants = parts;
+        selectedParticipants = new Set(parts);
+        setupSettings();
+        showScreen('screen-settings');
+      } catch(err) {
+        showScreen('screen-upload');
+        showError('error-msg', 'Failed to parse the file. Make sure it\'s a WhatsApp export.');
+      }
+    }, 50);
+  };
+  reader.readAsText(file);
+}
+
+// ── Join Room (from landing) ──────────────────────────────────────────────────
+$('join-code-input').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+
+$('join-btn').addEventListener('click', async () => {
+  const code = $('join-code-input').value.trim().toUpperCase();
+  hideError('join-error-msg');
+  if (code.length < 4) { showError('join-error-msg', 'Enter a valid room code.'); return; }
+  $('join-btn').disabled = true;
+  $('join-btn').textContent = '…';
+  try {
+    const { data, error } = await sb.from('wsi_sessions').select('id,room_code').eq('room_code', code).single();
+    if (error || !data) { showError('join-error-msg', 'Room not found. Check the code and try again.'); return; }
+    roomCode = data.room_code;
+    sessionId = data.id;
+    isRoomMode = true;
+    $('join-room-badge').textContent = roomCode;
+    showScreen('screen-join');
+  } catch(e) {
+    showError('join-error-msg', 'Connection error. Try again.');
+  } finally {
+    $('join-btn').disabled = false;
+    $('join-btn').textContent = 'Join →';
+  }
+});
+
+$('join-back-btn').addEventListener('click', () => showScreen('screen-upload'));
+
+$('join-confirm-btn').addEventListener('click', async () => {
+  const name = $('player-name-input').value.trim();
+  hideError('name-error-msg');
+  if (!name) { showError('name-error-msg', 'Enter your name first!'); return; }
+  $('working-label').textContent = 'Loading quiz…';
+  showScreen('screen-working');
+  try {
+    // Load questions from session
+    const { data, error } = await sb.from('wsi_sessions').select('questions,participant_names').eq('id', sessionId).single();
+    if (error || !data) throw new Error('Session not found');
+    playerName = name;
+    quizQuestions = data.questions;
+    currentQ = 0; score = 0; answers = [];
+    showScreen('screen-quiz');
+    renderQuestion();
+  } catch(e) {
+    showScreen('screen-join');
+    showError('name-error-msg', 'Failed to load quiz. The room may have expired.');
+  }
+});
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function setupSettings() {
+  $('stat-messages').textContent = allMessages.length.toLocaleString();
+  $('stat-people').textContent = participants.length;
+  updateUsable();
+  const grid = $('participants-grid');
+  grid.innerHTML = '';
+  participants.forEach(p => {
+    const chip = document.createElement('div');
+    chip.className = 'participant-chip selected';
+    chip.textContent = p;
+    chip.addEventListener('click', () => {
+      if (selectedParticipants.has(p)) {
+        if (selectedParticipants.size <= 2) return;
+        selectedParticipants.delete(p); chip.classList.remove('selected');
+      } else {
+        selectedParticipants.add(p); chip.classList.add('selected');
+      }
+      updateUsable();
+    });
+    grid.appendChild(chip);
+  });
+  const slider = $('q-count');
+  slider.addEventListener('input', () => { $('q-count-val').textContent = slider.value; updateUsable(); });
+}
+
+function updateUsable() {
+  const usable = allMessages.filter(m => selectedParticipants.has(m.author) && m.text.length <= 200);
+  $('stat-usable').textContent = usable.length;
+  const maxQ = Math.min(25, usable.length);
+  const slider = $('q-count');
+  slider.max = maxQ;
+  if (parseInt(slider.value) > maxQ) { slider.value = maxQ; $('q-count-val').textContent = maxQ; }
+  const disabled = usable.length < 5 || selectedParticipants.size < 2;
+  $('create-room-btn').disabled = disabled;
+  $('solo-btn').disabled = disabled;
+}
+
+$('back-btn').addEventListener('click', () => { showScreen('screen-upload'); hideError('error-msg'); });
+
+$('solo-btn').addEventListener('click', () => {
+  isRoomMode = false; roomCode = null; sessionId = null; playerName = null;
+  quizQuestions = buildQuizQuestions();
+  currentQ = 0; score = 0; answers = [];
+  showScreen('screen-quiz');
+  renderQuestion();
+});
+
+$('create-room-btn').addEventListener('click', async () => {
+  hideError('settings-error-msg');
+  $('working-label').textContent = 'Creating room…';
+  showScreen('screen-working');
+  const questions = buildQuizQuestions();
+  const code = genRoomCode();
+  try {
+    const { data, error } = await sb.from('wsi_sessions').insert({
+      room_code: code,
+      questions: questions,
+      participant_names: [...selectedParticipants],
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    }).select('id').single();
+    if (error) throw error;
+    roomCode = code;
+    sessionId = data.id;
+    isRoomMode = true;
+    quizQuestions = questions;
+    $('room-code-display').textContent = roomCode;
+    $('player-count').textContent = '(0)';
+    $('player-list').innerHTML = '';
+    showScreen('screen-room');
+    subscribeToPlayers();
+  } catch(e) {
+    showScreen('screen-settings');
+    showError('settings-error-msg', 'Failed to create room: ' + (e.message || 'unknown error'));
+  }
+});
+
+// ── Room Lobby ────────────────────────────────────────────────────────────────
+function subscribeToPlayers() {
+  if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
+  realtimeSub = sb.channel('scores_' + sessionId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wsi_scores', filter: `session_id=eq.${sessionId}` }, () => {
+      refreshPlayerList();
+    })
+    .subscribe();
+  refreshPlayerList();
+}
+
+async function refreshPlayerList() {
+  const { data } = await sb.from('wsi_scores').select('player_name,score,total').eq('session_id', sessionId).order('score', { ascending: false });
+  if (!data) return;
+  const list = $('player-list');
+  list.innerHTML = '';
+  $('player-count').textContent = `(${data.length})`;
+  data.forEach(p => {
+    const tag = document.createElement('div');
+    tag.className = 'player-tag';
+    tag.textContent = `${p.player_name} ${p.score !== null ? `— ${p.score}/${p.total}` : ''}`;
+    list.appendChild(tag);
+  });
+}
+
+$('room-start-btn').addEventListener('click', () => {
+  if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
+  playerName = 'Host';
+  currentQ = 0; score = 0; answers = [];
+  showScreen('screen-quiz');
+  renderQuestion();
+});
+
+$('room-back-btn').addEventListener('click', () => {
+  if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
+  showScreen('screen-settings');
+});
+
+// ── Quiz ──────────────────────────────────────────────────────────────────────
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildQuizQuestions() {
+  const pool = allMessages.filter(m =>
+    selectedParticipants.has(m.author) && m.text.length >= 8 && m.text.length <= 160
+  );
+  shuffle(pool);
+  const count = parseInt($('q-count').value);
+  const perPerson = Math.ceil(count / selectedParticipants.size) + 2;
+  const balanced = [];
+  const counts = {};
+  for (const msg of pool) {
+    counts[msg.author] = counts[msg.author] || 0;
+    if (counts[msg.author] < perPerson) { balanced.push(msg); counts[msg.author]++; }
+  }
+  shuffle(balanced);
+  const selected = balanced.slice(0, count);
+  const parts = [...selectedParticipants];
+  return selected.map(msg => {
+    const others = parts.filter(p => p !== msg.author);
+    shuffle(others);
+    const choices = shuffle([msg.author, ...others.slice(0, 3)]);
+    return { text: msg.text, author: msg.author, choices };
+  });
+}
+
+function renderQuestion() {
+  const q = quizQuestions[currentQ];
+  const total = quizQuestions.length;
+  $('quiz-progress').textContent = `Question ${currentQ + 1} of ${total}`;
+  $('quiz-score-badge').textContent = `${score} pts`;
+  $('progress-fill').style.width = `${(currentQ / total) * 100}%`;
+  $('quiz-message').textContent = q.text;
+
+  const fb = $('feedback-bar');
+  fb.className = 'feedback-bar'; fb.textContent = '';
+  const nextBtn = $('next-btn');
+  nextBtn.className = 'next-btn';
+  nextBtn.textContent = currentQ < total - 1 ? 'Next →' : 'See Results 🏆';
+
+  const grid = $('answers-grid');
+  grid.innerHTML = '';
+  q.choices.forEach(choice => {
+    const btn = document.createElement('button');
+    btn.className = 'answer-btn';
+    btn.textContent = choice;
+    btn.addEventListener('click', () => handleAnswer(choice, q.author, q.choices));
+    grid.appendChild(btn);
+  });
+  answered = false;
+}
+
+function handleAnswer(guess, correct, choices) {
+  if (answered) return;
+  answered = true;
+  const isCorrect = guess === correct;
+  if (isCorrect) score++;
+  answers.push({ message: quizQuestions[currentQ].text, correct, guessed: guess, right: isCorrect });
+
+  $('answers-grid').querySelectorAll('.answer-btn').forEach(btn => {
+    btn.disabled = true;
+    if (btn.textContent === correct) btn.classList.add(isCorrect ? 'correct' : 'reveal');
+    else if (btn.textContent === guess && !isCorrect) btn.classList.add('wrong');
+  });
+
+  const fb = $('feedback-bar');
+  if (isCorrect) {
+    const p = ['✓ Nailed it!','✓ You know them too well!','✓ Correct!','✓ Got it!','✓ Nice one!'];
+    fb.textContent = p[Math.floor(Math.random() * p.length)];
+    fb.className = 'feedback-bar correct-fb show';
+  } else {
+    fb.textContent = `✗ That was ${correct}`;
+    fb.className = 'feedback-bar wrong-fb show';
+  }
+  $('quiz-score-badge').textContent = `${score} pts`;
+  $('next-btn').classList.add('show');
+}
+
+$('next-btn').addEventListener('click', () => {
+  currentQ++;
+  if (currentQ >= quizQuestions.length) showResults();
+  else renderQuestion();
+});
+
+// ── Results ───────────────────────────────────────────────────────────────────
+async function showResults() {
+  const total = quizQuestions.length;
+  const pct = score / total;
+  const emoji = pct === 1 ? '🏆' : pct >= 0.8 ? '🔥' : pct >= 0.6 ? '😎' : pct >= 0.4 ? '🤔' : pct >= 0.2 ? '😅' : '💀';
+  const tagline = pct === 1 ? 'Perfect score! You know these people too well 👀'
+    : pct >= 0.8 ? "You're practically a mind reader!"
+    : pct >= 0.6 ? 'Pretty good! You know your people.'
+    : pct >= 0.4 ? 'You sort of know your friends, I guess…'
+    : pct >= 0.2 ? 'Maybe spend more time in the group chat?'
+    : 'Do you even know these people?!';
+
+  $('results-emoji').textContent = emoji;
+  $('results-score').textContent = `${score}/${total}`;
+  $('results-tagline').textContent = tagline;
+
+  const list = $('breakdown-list');
+  list.innerHTML = '';
+  answers.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'breakdown-row';
+    row.innerHTML = `
+      <span class="breakdown-icon">${a.right ? '✅' : '❌'}</span>
+      <span class="breakdown-q">${a.message.substring(0, 55)}${a.message.length > 55 ? '…' : ''}</span>
+      <span class="breakdown-author">${a.correct}</span>
+      ${!a.right ? `<span class="breakdown-guess">you: ${a.guessed}</span>` : ''}
+    `;
+    list.appendChild(row);
+  });
+
+  const lbBtn = $('view-lb-btn');
+  if (isRoomMode) {
+    lbBtn.style.display = 'block';
+    // Save score to Supabase
+    try {
+      const { data } = await sb.from('wsi_scores').insert({
+        session_id: sessionId,
+        player_name: playerName,
+        score,
+        total,
+        answers,
+      }).select('id').single();
+      if (data) playerScoreId = data.id;
+    } catch(e) { /* non-fatal */ }
+  } else {
+    lbBtn.style.display = 'none';
+  }
+  showScreen('screen-results');
+}
+
+$('view-lb-btn').addEventListener('click', () => loadLeaderboard());
+$('play-again-btn').addEventListener('click', () => {
+  if (isRoomMode && !quizQuestions.length) return;
+  currentQ = 0; score = 0; answers = [];
+  if (!isRoomMode) quizQuestions = buildQuizQuestions();
+  showScreen('screen-quiz');
+  renderQuestion();
+});
+$('new-chat-btn').addEventListener('click', () => { fileInput.value = ''; showScreen('screen-upload'); });
+$('share-btn').addEventListener('click', () => {
+  const total = quizQuestions.length;
+  const icons = answers.map(a => a.right ? '✅' : '❌').join('');
+  const text = `Who Said It? 💬\n${score}/${total} — ${Math.round(score/total*100)}%\n${icons}`;
+  navigator.clipboard.writeText(text).then(() => {
+    $('share-btn').textContent = '✓ Copied!';
+    setTimeout(() => { $('share-btn').textContent = '📋 Copy Results'; }, 2000);
+  });
+});
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+async function loadLeaderboard() {
+  $('lb-room-badge').textContent = roomCode;
+  showScreen('screen-leaderboard');
+  await refreshLeaderboard();
+}
+
+async function refreshLeaderboard() {
+  const { data, error } = await sb.from('wsi_scores')
+    .select('player_name,score,total,created_at')
+    .eq('session_id', sessionId)
+    .order('score', { ascending: false });
+
+  const list = $('lb-list');
+  if (error || !data || data.length === 0) {
+    list.innerHTML = '<div class="lb-empty">No scores yet. Be the first!</div>';
+    return;
+  }
+
+  const medals = ['🥇','🥈','🥉'];
+  list.innerHTML = '';
+  data.forEach((row, i) => {
+    const isMe = row.player_name === playerName;
+    const div = document.createElement('div');
+    div.className = 'lb-row' + (isMe ? ' me' : '');
+    div.innerHTML = `
+      <span class="lb-rank">${medals[i] || (i+1)}</span>
+      <span class="lb-name">${row.player_name}${isMe ? ' (you)' : ''}</span>
+      <span class="lb-score">${row.score}/${row.total}</span>
+      <span class="lb-pct">${Math.round(row.score/row.total*100)}%</span>
+    `;
+    list.appendChild(div);
+  });
+  $('refresh-note').textContent = `Last updated ${new Date().toLocaleTimeString()}`;
+}
+
+$('lb-refresh-btn').addEventListener('click', refreshLeaderboard);
+$('lb-home-btn').addEventListener('click', () => {
+  isRoomMode = false; roomCode = null; sessionId = null; playerName = null;
+  quizQuestions = []; fileInput.value = '';
+  showScreen('screen-upload');
+});
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function genRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+</script>
+</body>
+</html>
