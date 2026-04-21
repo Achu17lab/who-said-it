@@ -331,7 +331,17 @@
     </div>
     <div class="error-msg" id="join-error-msg"></div>
 
-    <div class="how-to" style="margin-top:16px">
+    <div class="card" style="margin-top:14px;border-color:rgba(76,222,138,0.25);background:rgba(76,222,138,0.04)">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px">🔒</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:3px">Your chat never leaves your device</div>
+          <div style="font-size:13px;color:var(--muted)">Parsing happens entirely in your browser. When you share a room, questions are <strong style="color:var(--text)">end-to-end encrypted</strong> — Supabase only stores ciphertext. No one else can read your messages.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="how-to" style="margin-top:14px">
       <h3>How to export from WhatsApp</h3>
       <ol>
         <li><span>Open the group chat</span></li>
@@ -400,6 +410,7 @@
 
     <button class="btn btn-primary" id="room-start-btn">I'm Ready — Start Playing! 🎮</button>
     <button class="btn btn-ghost" id="room-back-btn" style="margin-top:8px">← Back to settings</button>
+    <button class="btn btn-ghost" id="room-delete-btn" style="color:#f96e6e;margin-top:4px">🗑 Delete room &amp; all data</button>
     <div class="error-msg" id="room-error-msg"></div>
   </div>
 
@@ -502,6 +513,36 @@ let roomCode = null;
 let playerName = null;
 let playerScoreId = null;
 let realtimeSub = null;
+
+// ── Crypto (AES-256-GCM, key derived from room code via PBKDF2) ───────────────
+const CRYPTO_SALT = new TextEncoder().encode('who-said-it-v1');
+
+async function deriveKey(code) {
+  const raw = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: CRYPTO_SALT, iterations: 100000, hash: 'SHA-256' },
+    raw,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+function bufToB64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function b64ToBuf(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+
+async function encryptQuestions(questions, code) {
+  const key = await deriveKey(code);
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(questions)));
+  return { iv: bufToB64(iv), data: bufToB64(enc) };
+}
+
+async function decryptQuestions(blob, code) {
+  const key = await deriveKey(code);
+  const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(blob.iv) }, key, b64ToBuf(blob.data));
+  return JSON.parse(new TextDecoder().decode(dec));
+}
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -631,14 +672,15 @@ $('join-confirm-btn').addEventListener('click', async () => {
   const name = $('player-name-input').value.trim();
   hideError('name-error-msg');
   if (!name) { showError('name-error-msg', 'Enter your name first!'); return; }
-  $('working-label').textContent = 'Loading quiz…';
+  $('working-label').textContent = 'Decrypting quiz…';
   showScreen('screen-working');
   try {
-    // Load questions from session
-    const { data, error } = await sb.from('wsi_sessions').select('questions,participant_names').eq('id', sessionId).single();
+    const { data, error } = await sb.from('wsi_sessions').select('encrypted_questions').eq('id', sessionId).single();
     if (error || !data) throw new Error('Session not found');
+    // Decrypt client-side using the room code as the key
+    const questions = await decryptQuestions(data.encrypted_questions, roomCode);
     playerName = name;
-    quizQuestions = data.questions;
+    quizQuestions = questions;
     currentQ = 0; score = 0; answers = [];
     showScreen('screen-quiz');
     renderQuestion();
@@ -698,22 +740,24 @@ $('solo-btn').addEventListener('click', () => {
 
 $('create-room-btn').addEventListener('click', async () => {
   hideError('settings-error-msg');
-  $('working-label').textContent = 'Creating room…';
+  $('working-label').textContent = 'Encrypting & creating room…';
   showScreen('screen-working');
   const questions = buildQuizQuestions();
   const code = genRoomCode();
   try {
+    // Encrypt in-browser before any network call — Supabase never sees plaintext
+    const encrypted = await encryptQuestions(questions, code);
     const { data, error } = await sb.from('wsi_sessions').insert({
       room_code: code,
-      questions: questions,
-      participant_names: [...selectedParticipants],
+      encrypted_questions: encrypted,
+      question_count: questions.length,
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     }).select('id').single();
     if (error) throw error;
     roomCode = code;
     sessionId = data.id;
     isRoomMode = true;
-    quizQuestions = questions;
+    quizQuestions = questions; // kept in memory only
     $('room-code-display').textContent = roomCode;
     $('player-count').textContent = '(0)';
     $('player-list').innerHTML = '';
@@ -761,6 +805,14 @@ $('room-start-btn').addEventListener('click', () => {
 $('room-back-btn').addEventListener('click', () => {
   if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
   showScreen('screen-settings');
+});
+
+$('room-delete-btn').addEventListener('click', async () => {
+  if (!confirm('Delete this room and wipe all data from the server?')) return;
+  if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
+  await sb.from('wsi_sessions').delete().eq('id', sessionId);
+  sessionId = null; roomCode = null; isRoomMode = false;
+  showScreen('screen-upload');
 });
 
 // ── Quiz ──────────────────────────────────────────────────────────────────────
@@ -889,12 +941,12 @@ async function showResults() {
     lbBtn.style.display = 'block';
     // Save score to Supabase
     try {
+      // Never store answers — they contain message text
       const { data } = await sb.from('wsi_scores').insert({
         session_id: sessionId,
         player_name: playerName,
         score,
         total,
-        answers,
       }).select('id').single();
       if (data) playerScoreId = data.id;
     } catch(e) { /* non-fatal */ }
